@@ -24,6 +24,7 @@ def LPF(time, data):
 class noise_reducer:
     def __init__(self):
         pass
+    # something
 
     def apply_LPF(self, signal, desired_cycles):
         for i in range(signal.shape[0]):
