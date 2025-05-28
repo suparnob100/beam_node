@@ -26,9 +26,11 @@ class noise_reducer:
         pass
     # something
 
-    def apply_LPF(self, signal, desired_cycles):
+    def apply_LPF(self, signal, nt, t, desired_cycles):
         for i in range(signal.shape[0]):
-            data = data_avg = np.tile(data_avg, desired_cycles, 1)
+            data = np.tile(signal, desired_cycles, 1)
+            data = LPF(t, data)
+            signal[i] = data[:nt, :]
         return signal
 
 

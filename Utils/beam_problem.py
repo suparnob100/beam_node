@@ -78,9 +78,9 @@ class beam_problem:
         return (fi / (omega_i**2 * T)) + sum_term_d, sum_term_v
     
 
-    def solve(self, tau, s, omega):
+    def solve(self, tau, s, omega, cycles = 1):
         T = 2*np.pi/omega
-        t = np.linspace(0, T, self.nt+1) # Time
+        t = np.linspace(0, T, self.nt*cycles+1) # Time
         x = np.linspace(0, 1, self.nx) # Space
         
         W = 0
