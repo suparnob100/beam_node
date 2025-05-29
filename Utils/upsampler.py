@@ -61,14 +61,3 @@ def fourier_upsample_add(signal, add_points):
     return np.real(upsampled_signal)
 
 
-def perform_upsample(W, W_dot):
-    W = W[:, :int(T/self.max_dt)]
-    W_dot = W_dot[:, :int(T/self.max_dt)]
-    W_ret = np.zeros([self.nx, t.shape[0]+1])
-    W_dot_ret = np.zeros([self.nx, t.shape[0]+1])
-
-    for i in range(self.nx):
-        W_ret[i] = fourier_upsample_add(W[i], t.shape[0]+1 - W.shape[1])
-        W_dot_ret[i] = fourier_upsample_add(W_dot[i], t.shape[0]+1 - W.shape[1])
-    
-    return W_ret[:, :-1].T, W_dot_ret[:, :-1].T
