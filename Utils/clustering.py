@@ -1,8 +1,11 @@
+from sobol import generate_sobol_with_exclusion
 from scipy.cluster.hierarchy import dendrogram, linkage, fcluster
+from scipy.spatial import Delaunay
 from sklearn.preprocessing import StandardScaler
 from sklearn.cluster import KMeans, DBSCAN, AgglomerativeClustering, SpectralClustering
-from sklearn.decomposition import PCA
 from sklearn.metrics import silhouette_score
+from sklearn.mixture import GaussianMixture
+from sklearn.neighbors import KernelDensity
 import matplotlib.cm as cm
 import matplotlib.pyplot as plt
 import numpy as np
@@ -49,6 +52,8 @@ class Cluster:
 
         else:
             raise ValueError(f"Unsupported clustering method: {method}")
+        
+        self.n_clusters = kwargs.get('n_clusters', 2)
 
     def plot_dendrogram(self):
         if self.method != 'hierarchical' or self.linkage_matrix is None:
@@ -68,7 +73,6 @@ class Cluster:
 
         params = np.array(self.params)
 
-        # Ensure 2D for plotting
         if params.ndim == 1:
             x = params
             y = np.zeros_like(params)
@@ -105,9 +109,6 @@ class Cluster:
 
 
     def compute_silhouette_score(self):
-        """
-        Computes the silhouette score of the current clustering.
-        """
         if self.cluster_labels is None:
             raise ValueError("Run find_clusters() first.")
         
@@ -162,3 +163,125 @@ class Cluster:
             param_idx[c - 1].append(i)
 
         return NLS_cl, param_cl, param_idx
+
+    def plot_delaunay(self, cluster_idx=0):
+
+        params = np.array(self.get_clustered_data()[1][cluster_idx])
+        if params.ndim == 1:
+            params = params.reshape(-1, 1)
+        
+        n, d = params.shape
+
+        if n < 3:
+            print(f"[Delaunay] Cluster {cluster_idx} has too few points ({n}). Showing fallback plot.")
+            plt.figure()
+            if d == 1:
+                plt.scatter(params[:, 0], np.zeros_like(params), s=50)
+                plt.title(f"Cluster {cluster_idx} (1D - fallback)")
+                plt.xlabel("Param")
+                plt.yticks([])
+            elif d == 2:
+                plt.scatter(params[:, 0], params[:, 1], s=50)
+                plt.title(f"Cluster {cluster_idx} (2D - fallback)")
+                plt.xlabel("Param 1")
+                plt.ylabel("Param 2")
+            else:
+                print("Unsupported dimension for plotting.")
+                return None
+            plt.grid(True)
+            plt.show()
+            return None
+
+        if d == 1:
+            plt.figure(figsize=(6, 2))
+            plt.scatter(params[:, 0], np.zeros_like(params), s=50)
+            plt.title(f"Cluster {cluster_idx} (1D)")
+            plt.xlabel("Param")
+            plt.yticks([])
+            plt.grid(True)
+            plt.show()
+            return None
+
+        elif d == 2:
+            tri = Delaunay(params)
+            plt.figure(figsize=(6, 5))
+            plt.triplot(params[:, 0], params[:, 1], tri.simplices, color='gray')
+            plt.plot(params[:, 0], params[:, 1], 'o', label=f"Cluster {cluster_idx}")
+            plt.title(f"Delaunay Triangulation - Cluster {cluster_idx}")
+            plt.xlabel("Param 1")
+            plt.ylabel("Param 2")
+            plt.legend()
+            plt.axis('equal')
+            plt.grid(True)
+            plt.show()
+            return tri
+
+        else:
+            print(f"[Delaunay] Cluster {cluster_idx} has {d}D parameters (unsupported).")
+            return None
+
+    def generate_from_cluster(self, cluster_idx, n_samples=10,
+                          param_gen='gmm',
+                          min_dist=1e-6, bandwidth=0.2,
+                          oversample_factor=5):
+
+        def is_in_hull(points, hull):
+            return hull.find_simplex(points) >= 0
+        
+        if cluster_idx >= self.n_clusters:
+            raise ValueError(f"cluster_idx must be smaller than n_clusters: {self.n_clusters}")
+
+        param_cluster = np.array(self.get_clustered_data()[1][cluster_idx])
+
+        n_cluster, d = param_cluster.shape
+
+        if n_cluster < 3:
+            print(f"[Cluster {cluster_idx}] Too few points ({n_cluster}) — fallback to Sobol.")
+            bounds = [(param_cluster[:, i].min(), param_cluster[:, i].max()) for i in range(d)]
+            new_params = generate_sobol_with_exclusion(
+                dimensions=d,
+                num_points=n_samples,
+                bounds=bounds,
+                existing=param_cluster,
+                min_dist=min_dist,
+                oversample_factor=oversample_factor,
+                scramble=True
+            )
+        else:
+            if param_gen == 'gmm':
+                model = GaussianMixture(n_components=1).fit(param_cluster)
+                sample_fn = lambda n: model.sample(n)[0]
+            elif param_gen == 'kde':
+                model = KernelDensity(kernel='gaussian', bandwidth=bandwidth).fit(param_cluster)
+                sample_fn = lambda n: model.sample(n)
+            elif param_gen == 'sobol':
+                bounds = [(param_cluster[:, i].min(), param_cluster[:, i].max()) for i in range(d)]
+                new_params = generate_sobol_with_exclusion(
+                    dimensions=d,
+                    num_points=n_samples,
+                    bounds=bounds,
+                    existing=param_cluster,
+                    min_dist=min_dist,
+                    oversample_factor=oversample_factor,
+                    scramble=True
+                )
+            else:
+                raise ValueError("param_gen must be 'gmm', 'kde', or 'sobol'.")
+
+            if param_gen in ['gmm', 'kde']:
+                accepted = []
+                if d <= 2:
+                    hull = Delaunay(param_cluster)
+                    while len(accepted) < n_samples:
+                        samples = sample_fn(oversample_factor * (n_samples - len(accepted)))
+                        mask = is_in_hull(samples, hull)
+                        accepted.extend(samples[mask])
+                else:
+                    while len(accepted) < n_samples:
+                        samples = sample_fn(n_samples - len(accepted))
+                        accepted.extend(samples)
+                new_params = np.array(accepted[:n_samples])
+
+
+        return new_params
+
