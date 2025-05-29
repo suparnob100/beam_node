@@ -80,7 +80,7 @@ class beam_problem:
 
     def solve(self, tau, s, omega, cycles = 1):
         T = 2*np.pi/omega
-        t = np.linspace(0, T, self.nt*cycles+1) # Time
+        t = np.linspace(0, T*cycles, self.nt*cycles+1) # Time
         x = np.linspace(0, 1, self.nx) # Space
         
         W = 0
