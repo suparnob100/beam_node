@@ -47,3 +47,14 @@ class noise_reducer:
 
             signal[i] = data_avg
         return signal
+
+def upsampler():
+    if self.upsample != None:
+        W = W[:, :int(T/self.max_dt)]
+        W_dot = W_dot[:, :int(T/self.max_dt)]
+        W_ret = np.zeros([self.nx, t.shape[0]+1])
+        W_dot_ret = np.zeros([self.nx, t.shape[0]+1])
+
+        for i in range(self.nx):
+            W_ret[i] = fourier_upsample_add(W[i], t.shape[0]+1 - W.shape[1])
+            W_dot_ret[i] = fourier_upsample_add(W_dot[i], t.shape[0]+1 - W.shape[1])
