@@ -1,6 +1,6 @@
 from sobol import generate_sobol_with_exclusion
 from scipy.cluster.hierarchy import dendrogram, linkage, fcluster
-from scipy.spatial import Delaunay
+from scipy.spatial import Delaunay, cKDTree
 from sklearn.preprocessing import StandardScaler
 from sklearn.cluster import KMeans, DBSCAN, AgglomerativeClustering, SpectralClustering
 from sklearn.metrics import silhouette_score
@@ -11,6 +11,14 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 class Cluster:
+    """
+    methods: 
+        find_clusters - finds clusters using specified clustering algorithm
+        compute_silhouette_score - Applies silhouette scoring for n clusters
+        find_best_k_by_silhouette - Applies compute_silhouette_score for a range of clusters and plots result
+        get_clustered_data - ourputs the clusters computed from find_clusters
+        generate_from_cluster - generates new parameters in a specified cluster
+    """
     def __init__(self, data, params, normalize=True):
         self.data = data
         self.params = params
@@ -66,7 +74,6 @@ class Cluster:
         plt.grid(True)
         plt.show()
 
-
     def plot_clusters_2d(self):
         if self.cluster_labels is None:
             raise ValueError("Run find_clusters() before plotting clusters.")
@@ -107,7 +114,6 @@ class Cluster:
         plt.grid(True)
         plt.show()
 
-
     def compute_silhouette_score(self):
         if self.cluster_labels is None:
             raise ValueError("Run find_clusters() first.")
@@ -118,7 +124,6 @@ class Cluster:
             raise ValueError("Silhouette score needs at least 2 clusters.")
 
         return silhouette_score(self.flattened_data, labels)
-
 
     def find_best_k_by_silhouette(self, method='kmeans', k_range=range(2, 10), plot=True):
         scores = []
@@ -157,14 +162,14 @@ class Cluster:
 
         for i, c in enumerate(self.cluster_labels):
             if c <= 0:
-                continue  # Skip noise points (e.g., in DBSCAN)
+                continue
             NLS_cl[c - 1].append(self.data[i])
             param_cl[c - 1].append(self.params[i])
             param_idx[c - 1].append(i)
 
         return NLS_cl, param_cl, param_idx
 
-    def plot_delaunay(self, cluster_idx=0):
+    def plot_delaunay(self, cluster_idx=0, new_params=None):
 
         params = np.array(self.get_clustered_data()[1][cluster_idx])
         if params.ndim == 1:
@@ -172,29 +177,11 @@ class Cluster:
         
         n, d = params.shape
 
-        if n < 3:
-            print(f"[Delaunay] Cluster {cluster_idx} has too few points ({n}). Showing fallback plot.")
-            plt.figure()
-            if d == 1:
-                plt.scatter(params[:, 0], np.zeros_like(params), s=50)
-                plt.title(f"Cluster {cluster_idx} (1D - fallback)")
-                plt.xlabel("Param")
-                plt.yticks([])
-            elif d == 2:
-                plt.scatter(params[:, 0], params[:, 1], s=50)
-                plt.title(f"Cluster {cluster_idx} (2D - fallback)")
-                plt.xlabel("Param 1")
-                plt.ylabel("Param 2")
-            else:
-                print("Unsupported dimension for plotting.")
-                return None
-            plt.grid(True)
-            plt.show()
-            return None
-
         if d == 1:
             plt.figure(figsize=(6, 2))
             plt.scatter(params[:, 0], np.zeros_like(params), s=50)
+            if new_params is not None:
+                plt.scatter(new_params[:, 0], np.zeros_like(params), s=50, c="tab:orange")
             plt.title(f"Cluster {cluster_idx} (1D)")
             plt.xlabel("Param")
             plt.yticks([])
@@ -207,6 +194,8 @@ class Cluster:
             plt.figure(figsize=(6, 5))
             plt.triplot(params[:, 0], params[:, 1], tri.simplices, color='gray')
             plt.plot(params[:, 0], params[:, 1], 'o', label=f"Cluster {cluster_idx}")
+            if new_params is not None:
+                plt.scatter(new_params[:, 0], new_params[:, 1], c="tab:orange")
             plt.title(f"Delaunay Triangulation - Cluster {cluster_idx}")
             plt.xlabel("Param 1")
             plt.ylabel("Param 2")
@@ -272,16 +261,17 @@ class Cluster:
                 accepted = []
                 if d <= 2:
                     hull = Delaunay(param_cluster)
+                    nearest_tree = cKDTree(param_cluster)
                     while len(accepted) < n_samples:
                         samples = sample_fn(oversample_factor * (n_samples - len(accepted)))
-                        mask = is_in_hull(samples, hull)
+                        mask = (nearest_tree.query(samples)[0] >= min_dist) & is_in_hull(samples, hull)
                         accepted.extend(samples[mask])
                 else:
                     while len(accepted) < n_samples:
-                        samples = sample_fn(n_samples - len(accepted))
+                        samples = (nearest_tree.query(samples)[0] >= min_dist) & is_in_hull(samples, hull)
                         accepted.extend(samples)
                 new_params = np.array(accepted[:n_samples])
 
-
+        self.plot_delaunay(cluster_idx=cluster_idx, new_params=new_params)
         return new_params
 

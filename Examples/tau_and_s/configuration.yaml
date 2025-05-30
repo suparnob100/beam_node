@@ -10,7 +10,30 @@ data:
     tau:
     - 0.015915494309189534
     - 0.15915494309189535
-model: null
+model:
+  D_hsizes:
+  - 120
+  - 120
+  E_hsizes:
+  - 120
+  - 120
+  lat_space: 8
+  noise: 0.0075
+  n_control: 3
+  n_layers: 2
+  n_units: 300
+  
+training:
+  n_epoch: 1000
+  patience: 200
+  lr_patience: 50
+  Qs:
+    - 10
+    - 10
+    - 10
+    - 10
+    - 10
+    - 10
 seed: 9
 sensors:
   n_A_basis: 13
