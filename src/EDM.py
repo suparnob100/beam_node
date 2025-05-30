@@ -97,8 +97,8 @@ class EDM:
         noise_init = noiseLayer(std=self.noise_std)
 
         encoder_x0 = Node(Encoder_init, ["x0"], ["LS_x0"], name="Encoder_x")
-        noiseBlock = Node(noise, ['LS_x0'], ['LS_x'], name='Noise')
-        model = Node(fxRK4, ['LS_x', 'U'], ['LS_x'], name='NODE')
+        noiseBlock = Node(noise_init, ['LS_x0'], ['LS_x'], name='Noise')
+        model = Node(NODE_init, ['LS_x', 'U'], ['LS_x'], name='NODE')
         decoder_x = Node(Decoder_init, [f"LS_x"], [f"x_hat"], name=f"Decoder_x")
         
         encoder_FX = Node(Encoder_init, [f"X"], [f"LS_X"], name=f"Encoder_X")
