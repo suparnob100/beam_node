@@ -22,21 +22,25 @@ model:
   n_control: 3
   n_layers: 2
   n_units: 300
-  
 training:
   n_epoch: 1000
   patience: 200
+  lr: 0.01
+  lMB: 4
+  nMB: 200
+  nBPP: 400
   lr_patience: 50
   Qs:
-    - 10
-    - 10
-    - 10
-    - 10
-    - 10
-    - 10
+    AE: 100
+    AENODE: 120
+    ONESTEP: 40
+    LASTSTEP: 70
+    LS: 100
+    TEMPORALDIFF: 80
+    SPATIALDIFF: 120
 seed: 9
 sensors:
   n_A_basis: 13
   n_SVD_basis: 15
-  num_sensors: 18
+  n_sensors: 18
 training: null
