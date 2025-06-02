@@ -30,6 +30,7 @@ training:
   nMB: 200
   nBPP: 400
   lr_patience: 50
+  warmup: 200
   Qs:
     AE: 100
     AENODE: 120

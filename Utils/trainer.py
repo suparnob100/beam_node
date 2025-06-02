@@ -14,20 +14,13 @@ def move_batch_to_device(batch, device="cpu"):
     return {k: v.to(device) if isinstance(v, torch.Tensor) else v for k, v in batch.items()}
 
 class Trainer:
-    """
-    Class encapsulating boilerplate PyTorch training code. Training procedure is somewhat
-    extensible through methods in Callback objects associated with training and evaluation
-    waypoints.
-    """
+
     def __init__(
         self,
         problem: Problem,
         train_data: torch.utils.data.DataLoader,
         dev_data: torch.utils.data.DataLoader = None,
         test_data: torch.utils.data.DataLoader = None,
-        CONFIG: dict = None,
-        time : np.array = None,
-        nt: int = None,
         optimizer: torch.optim.Optimizer = None,
         logger: BasicLogger = None,
         callback: Callback = Callback,
@@ -44,26 +37,12 @@ class Trainer:
         clip=100.0,
         device="cpu"
     ):
-        """
 
-        :param problem: Object which defines multi-objective loss function and computational graph
-        :param dataset: Batched (over chunks of time if sequence data) dataset for non-stochastic gradient descent
-        :param optimizer: Pytorch optimizer
-        :param logger: Object for logging results
-        :param epochs: (int) Number of epochs to train
-        :param epoch_verbose (int) printing epoch metric at each i-th epoch
-        :param patience: (int) Number of epochs to allow no improvement before early stopping
-        :param warmup: (int) How many epochs to wait before enacting early stopping policy
-        :param eval_metric: (str) Performance metric for model selection and early stopping
-        """
         self.model = problem
         self.optimizer = optimizer if optimizer is not None else torch.optim.Adam(problem.parameters(), 0.01, betas=(0.0, 0.9))
         self.train_data = train_data
         self.dev_data = dev_data
         self.test_data = test_data
-        self.CONFIG = CONFIG
-        self.time = time
-        self.nt = nt
         self.callback = callback
         self.callback.device = device
         self.logger = logger
@@ -77,11 +56,7 @@ class Trainer:
         self.test_metric = test_metric
         self.eval_metric = eval_metric
         self._eval_min = eval_mode == "min"
-        self.lr_scheduler = (
-            ReduceLROnPlateau(self.optimizer, mode="min", factor=0.25, patience=100, verbose=True)
-            if lr_scheduler
-            else None
-        )
+        self.lr_scheduler = ReduceLROnPlateau(self.optimizer, mode="min", factor=0.25, patience=lr_scheduler, verbose=True)
         self.patience = patience
         self.warmup = warmup
         self.badcount = 0
@@ -91,10 +66,7 @@ class Trainer:
         self.device = device
 
     def train(self, trial=None):
-        """
-        Optimize model according to train_metric and validate per-epoch according to eval_metric.
-        Trains for self.epochs and terminates early if self.patience threshold is exceeded.
-        """
+
         self.callback.begin_train(self)
 
         try:
@@ -130,16 +102,10 @@ class Trainer:
                                 if isinstance(value, torch.Tensor):
                                     batch_size = value.shape[0]
                                     break
-
                             losses.append(eval_output[self.dev_metric]/batch_size)
                         eval_output[f'mean_{self.dev_metric}'] = torch.mean(torch.stack(losses))
                         output = {**output, **eval_output}
                     self.callback.begin_eval(self, output)
-                    if trial is not None:
-                        trial.report(output[self.eval_metric], step=i)
-                        if trial.should_prune():
-                            print("Trial pruned at epoch", i)
-                            raise optuna.exceptions.TrialPruned()
 
                     if (self._eval_min and output[self.eval_metric] < self.best_devloss)\
                             or (not self._eval_min and output[self.eval_metric] > self.best_devloss):
@@ -150,7 +116,7 @@ class Trainer:
                         if i > self.warmup:
                             self.badcount += 1
                     if self.logger is not None:
-                        self.logger.log_metrics(self.CONFIG, output, step=i)
+                        self.logger.log_metrics(output, step=i)
                     else:
                         mean_loss = output[f'mean_{self.train_metric}']
                         if i % (self.epoch_verbose) == 0:

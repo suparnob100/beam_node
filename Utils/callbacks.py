@@ -36,29 +36,6 @@ class Callback:
         if self.current_lr != temp:
             self.current_lr = temp
             print(f"\n New Learning Rate - {temp}")
-            
-        if trainer.current_epoch%10 == 0 and False:
-            t_test = t_test = torch.linspace(0, 499, 500).to(trainer.device)
-            t_test = t_test[:, torch.newaxis]/500
-            raw_weights = trainer.model.nodes[1].nodes[0].callable.block.weight_net(t_test)
-            weights = nn.functional.softmax(raw_weights, dim=-1).unsqueeze(1)
-    
-            weights = weights.detach().cpu().numpy()
-            
-            plt.figure()
-            plt.plot(weights[:, 0, :])
-            plt.show()
-            
-        if trainer.current_epoch%10 == 0 and False:
-            t_test = t_test = torch.linspace(0, 499, 500).to(trainer.device)
-            t_test = t_test[:, torch.newaxis]/500
-            raw_weights = trainer.model.nodes[1].nodes[0].callable.block.gaussian_weights(t_test)
-    
-            weights = raw_weights.detach().cpu().numpy()
-            
-            plt.figure()
-            plt.plot(weights[:, 0, :])
-            plt.show()
 
     def end_train(self, trainer, output):
         pass

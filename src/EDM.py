@@ -1,14 +1,9 @@
 #%% Initialize
 import os
-import sys
-import argparse
-import json
 import numpy as np
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
-import re
-import glob
 
 from neuromancer.dataset import DictDataset
 from neuromancer.modules import blocks
@@ -17,6 +12,7 @@ from neuromancer.dynamics import integrators
 from neuromancer.constraint import variable
 from neuromancer.loss import PenaltyLoss
 from neuromancer.problem import Problem
+from neuromancer.loggers import BasicLogger
 
 
 if "__file__" in globals():
@@ -24,9 +20,11 @@ if "__file__" in globals():
 else:
     script_dir = os.getcwd()
 
-utils_dir = os.path.abspath(os.path.join(script_dir, "..", "..", "..", "Utils"))
+utils_dir = os.path.abspath(os.path.join(script_dir, "..", "Utils"))
+
 
 from trainer import Trainer
+from callbacks import Callback
 
 class noiseLayer(nn.Module):
     def __init__(self, std=0.005, device='cpu'):
@@ -97,6 +95,8 @@ class EDM:
 
         self.n_epoch = config['training']['n_epoch']
         self.patience = config['training']['patience']
+        self.warmup = config['training']['warmup']
+        self.lr_patience = config['training']['lr_patience']
         self.lr = config['training']['lr']
         self.Qs = config['training']['Qs']
 
@@ -266,6 +266,9 @@ class EDM:
         train_loader, dev_loader, test_data = \
             self.get_data(data_train, ft_train, data_dev, ft_dev, data_test, ft_test)
         
+        callbacker = Callback(self.device)
+        logger = BasicLogger(args = None, save_dir = output_paths, verbosity = 1, stdout=['dev_loss', 'train_loss'])
+
         if self.problem == None:
             raise ValueError("Problem has to be initiated first.")
         
@@ -274,19 +277,22 @@ class EDM:
             train_data = train_loader,
             dev_data = dev_loader,
             test_data = test_data,
-            CONFIG = CONFIG,
-            time = t,
-            nt = nt,
             optimizer = self.optimizer,
             logger = logger,
-            patience = 2000,
-            warmup = CONFIG['warmup'],
-            epochs = 10000,
+            patience = self.patience,
+            warmup = self.warmup,
+            epochs = self.n_epoch,
             eval_metric = "dev_loss",
             train_metric = "train_loss",
             dev_metric = "dev_loss",
             test_metric = "dev_loss",
-            lr_scheduler = True,
-            device = CONFIG['device'],
+            lr_scheduler = self.lr_patience,
+            device = self.device,
             callback = callbacker
         )
+
+        best_model = trainer.train()
+        self.problem.load_state_dict(best_model)
+
+        return self.problem
+
