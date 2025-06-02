@@ -77,10 +77,22 @@ class sensor_processing:
         A_Mat = ps_model.basis_matrix_[:, :self.n_A_basis]
         self.A_Mat = A_Mat
 
+    def apply_sensors(self, data):
+        pass
+
+    def load(self, path):
+        path = os.path.abspath(os.path.join(path, "compression_matrices"))
+        self.A_Mat = np.load(os.path.join(path, "A_Mat.npy"))
+        self.C_Mat = np.load(os.path.join(path, "C_Mat.npy"))
+        self.sensor_placement = np.load(os.path.join(path, "sensor_placement.npy"))
+
+        Theta = self.C_Mat@self.A_Mat
+        self.pinv_Theta = np.linalg.pinv(Theta)
+
+        return self.A_Mat, self.C_Mat, self.pinv_Theta, self.sensor_placement
+
     def save(self, path):
         path = os.path.abspath(os.path.join(path, "compression_matrices"))
         np.save(os.path.join(path, "A_Mat.npy"), self.A_Mat)
         np.save(os.path.join(path, "C_Mat.npy"), self.C_Mat)
         np.save(os.path.join(path, "sensor_placement.npy"), self.sensor_placement)
-
-        

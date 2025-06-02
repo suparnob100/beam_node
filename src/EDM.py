@@ -1,5 +1,5 @@
 #%% Initialize
-import os
+import os, sys
 import numpy as np
 import torch
 import torch.nn as nn
@@ -21,7 +21,7 @@ else:
     script_dir = os.getcwd()
 
 utils_dir = os.path.abspath(os.path.join(script_dir, "..", "Utils"))
-
+sys.path.append(utils_dir)
 
 from trainer import Trainer
 from callbacks import Callback

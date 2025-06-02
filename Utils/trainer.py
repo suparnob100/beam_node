@@ -2,7 +2,6 @@
 from copy import deepcopy
 import numpy as np
 import torch
-import optuna
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 from neuromancer.loggers import BasicLogger

@@ -6,12 +6,14 @@ def load_dataset(path, disp_norm = None, vel_norm = None):
     snapshot_data = np.load(path + "/snapshot_data.npy")
     parameters = np.load(path + "/params.npy")
 
-    if disp_norm:
+    if disp_norm is not None:
         snapshot_data[:, 0] /= disp_norm
         snapshot_data[:, 1] /= vel_norm
         return snapshot_data, parameters
     else:
-        return snapshot_data, parameters
+        disp_norm = np.max(np.abs(snapshot_data[:, 0]))
+        vel_norm = np.max(np.abs(snapshot_data[:, 1]))
+        return snapshot_data, parameters, disp_norm, vel_norm
 
 
 def save_dataset(path, data, params, cluster=None):
