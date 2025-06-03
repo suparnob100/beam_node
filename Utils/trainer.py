@@ -6,11 +6,26 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 from neuromancer.loggers import BasicLogger
 from neuromancer.problem import Problem
-from .callbacks import Callback
+from neuromancer.callbacks import Callback
 from neuromancer.dataset import DictDataset
 
 def move_batch_to_device(batch, device="cpu"):
     return {k: v.to(device) if isinstance(v, torch.Tensor) else v for k, v in batch.items()}
+
+class custom_callback(Callback):
+    def __init__(self, device='cpu'):
+        self.device = device
+        self.current_lr = 999.0
+
+    def begin_train(self, trainer):
+        self.current_lr = trainer.optimizer.param_groups[0]['lr']
+        print(f"\n Current Learning Rate - {self.current_lr}")
+
+    def end_epoch(self, trainer, output):
+        temp = trainer.optimizer.param_groups[0]['lr']
+        if self.current_lr != temp:
+            self.current_lr = temp
+            print(f"\n New Learning Rate - {temp}")
 
 class Trainer:
 
@@ -22,7 +37,7 @@ class Trainer:
         test_data: torch.utils.data.DataLoader = None,
         optimizer: torch.optim.Optimizer = None,
         logger: BasicLogger = None,
-        callback: Callback = Callback,
+        callback: Callback = custom_callback,
         lr_scheduler=False,
         epochs=1000,
         epoch_verbose=1,

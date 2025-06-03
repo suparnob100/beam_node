@@ -18,30 +18,32 @@ model:
   - 120
   - 120
   lat_space: 8
-  noise: 0.0075
   n_control: 3
   n_layers: 2
   n_units: 300
-training:
-  n_epoch: 1000
-  patience: 200
-  lr: 0.01
-  lMB: 4
-  nMB: 200
-  nBPP: 400
-  lr_patience: 50
-  warmup: 200
-  Qs:
-    AE: 100
-    AENODE: 120
-    ONESTEP: 40
-    LASTSTEP: 70
-    LS: 100
-    TEMPORALDIFF: 80
-    SPATIALDIFF: 120
+  noise: 0.0075
 seed: 9
 sensors:
   n_A_basis: 13
   n_SVD_basis: 15
   n_sensors: 18
-training: null
+  num_sensors: 18
+training:
+  n_epoch: 4000
+  patience: 200
+  warmup: 200
+  lr_patience: 100
+  lr: 0.01
+  Qs:
+    AENODE: 120
+    AE: 100
+    ONESTEP: 40
+    LASTSTEP: 40
+    LS: 100
+    TEMPORALDIFF: 80
+    SPATIALDIFF: 120
+  lMB: 4
+  nMB: 2000
+  nBPP: 400
+
+

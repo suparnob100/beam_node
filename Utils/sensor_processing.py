@@ -77,8 +77,12 @@ class sensor_processing:
         A_Mat = ps_model.basis_matrix_[:, :self.n_A_basis]
         self.A_Mat = A_Mat
 
-    def apply_sensors(self, data):
-        pass
+    def apply_sensors(self, data_train, data_val, data_test):
+        RS_train = data_train[:, :, :, self.sensor_placement]
+        RS_val = data_val[:, :, :, self.sensor_placement]
+        RS_test = data_test[:, :, :, self.sensor_placement]
+        
+        return RS_train, RS_val, RS_test
 
     def load(self, path):
         path = os.path.abspath(os.path.join(path, "compression_matrices"))

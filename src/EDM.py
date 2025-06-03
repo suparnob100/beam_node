@@ -23,8 +23,7 @@ else:
 utils_dir = os.path.abspath(os.path.join(script_dir, "..", "Utils"))
 sys.path.append(utils_dir)
 
-from trainer import Trainer
-from callbacks import Callback
+from trainer import Trainer, custom_callback
 
 class noiseLayer(nn.Module):
     def __init__(self, std=0.005, device='cpu'):
@@ -67,6 +66,20 @@ class decoder(nn.Module):
         output = self.lin_layer(output)
         return self.tan(output)
 
+class full_space(nn.Module):
+    def __init__(self, n_sparse, A_Mat, pinv_Theta, device):
+        super(full_space, self).__init__()
+        self.device = device
+        self.C = torch.tensor(A_Mat @ pinv_Theta, dtype=torch.float32, device=self.device).T.unsqueeze(0)
+        self.n_sparse = n_sparse
+
+    def forward(self, RS):
+        RS1 = RS[:, :, :self.n_sparse]
+        RS2 = RS[:, :, self.n_sparse:]
+        FS1 = RS1 @ self.C
+        FS2 = RS2 @ self.C
+        return torch.cat([FS1, FS2], dim=-1)
+
 def NODE(lat_space, n_control, n_layers, n_units, dt, device='cpu'):
     fx = blocks.MLP(lat_space+n_control, lat_space, bias=True,
                     linear_map=torch.nn.Linear,
@@ -76,10 +89,12 @@ def NODE(lat_space, n_control, n_layers, n_units, dt, device='cpu'):
     fxRK4 = integrators.RK4(fx, h=dt)
     return fxRK4
 
+
 class EDM:
-    def __init__(self, A_mat, pinv_Theta, config, device='cpu'):
+    def __init__(self, A_mat, pinv_Theta, dt, config, device='cpu'):
         self.A_mat = A_mat
         self.pinv_Theta = pinv_Theta
+        self.dt = dt
 
         self.n_sparse = config['sensors']['n_sensors']
 
@@ -112,8 +127,9 @@ class EDM:
     def build_model(self):
         Encoder_init = encoder(self.n_sparse, self.lat_space, self.Encoder_hsizes, self.device)
         Decoder_init = decoder(self.n_sparse, self.lat_space, self.Decoder_hsizes, self.device)
-        NODE_init = NODE(self.lat_space, self.n_control, self.n_NODE_layers, self.n_NODE_units, device=self.device)
-        noise_init = noiseLayer(std=self.noise_std)
+        NODE_init = NODE(self.lat_space, self.n_control, self.n_NODE_layers, self.n_NODE_units, self.dt, device=self.device)
+        noise_init = noiseLayer(std=self.noise_std, device=self.device)
+        FS_init = full_space(self.n_sparse, self.A_mat, self.pinv_Theta, self.device)
 
         encoder_x0 = Node(Encoder_init, ["x0"], ["LS_x0"], name="Encoder_x")
         noiseBlock = Node(noise_init, ['LS_x0'], ['LS_x'], name='Noise')
@@ -125,20 +141,32 @@ class EDM:
 
         dynamics_model = System([model], name='NODE_System', nsteps=self.lMB)
 
+        FS_x = Node(FS_init, ["x_hat"], ["x_hat"], name="FS_x")
+        FS_X = Node(FS_init, ["X_hat"], ["X_hat"], name="FS_X")
+        FS_t = Node(FS_init, ["X"], ["X"], name="FS_t")
+
         ## Loss functions
         # Variables
-        x_true = variable("X")
-        x_ae = variable("X_hat")
-        x_aenode = variable("x_hat")
+        X_true = variable("X")
+        X_ae = variable("X_hat")
+        X_aenode = variable("x_hat")[:, :-1, :]
         
         ls_ae = variable("LS_X")
         ls_aenode = variable("LS_x")
 
         # Full Space Conversion
+        '''
         C = torch.tensor(self.A_mat@self.pinv_Theta, dtype=torch.float32, device=self.device).T.unsqueeze(0) #Full space constant
-        X_true = x_true@C
-        X_ae = x_ae@C
-        X_aenode = x_aenode[:, :-1, :]@C
+        X_true = torch.zeros([self.nMB, self.lMB, self.n_sparse*2], device=self.device)
+        X_true[:, :, :self.n_sparse] = x_true[:, :, :self.n_sparse]@C
+        X_true[:, :, self.n_sparse:] = x_true[:, :, self.n_sparse:]@C
+        X_ae = torch.zeros([self.nMB, self.lMB, self.n_sparse*2], device=self.device)
+        X_ae[:, :, :self.n_sparse] = x_ae[:, :, :self.n_sparse]@C
+        X_ae[:, :, self.n_sparse:] = x_ae[:, :, self.n_sparse:]@C
+        X_aenode = torch.zeros([self.nMB, self.lMB, self.n_sparse*2], device=self.device)
+        X_aenode[:, :, :self.n_sparse] = x_aenode[:, :, :self.n_sparse]@C
+        X_aenode[:, :, self.n_sparse:] = x_aenode[:, :, self.n_sparse:]@C
+        '''
 
         # Temporal differencing
         FDt_true = (X_true[:, 2:, :] - X_true[:, 1:-1, :])
@@ -176,14 +204,13 @@ class EDM:
         xdf_loss = self.Qs["SPATIALDIFF"]*(CDx_pred == CDx_true)^2
         xdf_loss.name = "Spatial Diff Loss"
 
-
         objectives = [aenode_loss, ae_loss, onestep_loss, laststep_loss, ls_loss, tdf_loss, xdf_loss]
         constraints = []
 
         loss = PenaltyLoss(objectives, constraints)
 
         ## Problem
-        self.problem = Problem([encoder_x0, encoder_FX, noiseBlock, dynamics_model, decoder_x, decoder_FX], loss)
+        self.problem = Problem([encoder_x0, encoder_FX, noiseBlock, dynamics_model, decoder_x, decoder_FX, FS_x, FS_X, FS_t], loss)
         self.optimizer = torch.optim.Adam(self.problem.parameters(), lr = self.lr)
 
         self.problem.show()
@@ -266,8 +293,8 @@ class EDM:
         train_loader, dev_loader, test_data = \
             self.get_data(data_train, ft_train, data_dev, ft_dev, data_test, ft_test)
         
-        callbacker = Callback(self.device)
-        logger = BasicLogger(args = None, save_dir = output_paths, verbosity = 1, stdout=['dev_loss', 'train_loss'])
+        callbacker = custom_callback(self.device)
+        logger = BasicLogger(args = None, savedir = output_paths, verbosity = 1, stdout=['dev_loss', 'train_loss'])
 
         if self.problem == None:
             raise ValueError("Problem has to be initiated first.")
@@ -282,10 +309,10 @@ class EDM:
             patience = self.patience,
             warmup = self.warmup,
             epochs = self.n_epoch,
-            eval_metric = "dev_loss",
+            eval_metric = "val_loss",
             train_metric = "train_loss",
-            dev_metric = "dev_loss",
-            test_metric = "dev_loss",
+            dev_metric = "val_loss",
+            test_metric = "val_loss",
             lr_scheduler = self.lr_patience,
             device = self.device,
             callback = callbacker
