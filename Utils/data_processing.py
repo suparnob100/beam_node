@@ -2,33 +2,42 @@ import os
 import numpy as np
 import matplotlib.pyplot as plt
 
-def load_dataset(path, disp_norm = None, vel_norm = None, ft_norm = None):
+def load_dataset(path, normalize = False, disp_norm = None, vel_norm = None, ft_norm = None):
     snapshot_data = np.load(path + "/snapshot_data.npy")
     parameters = np.load(path + "/params.npy")
     forcing = np.load(path + "/forcing.npy")
 
-    if disp_norm is not None:
+    if disp_norm is not None and normalize == True:
         snapshot_data[:, 0] /= disp_norm
         snapshot_data[:, 1] /= vel_norm
     else:
         disp_norm = np.max(np.abs(snapshot_data[:, 0]))
         vel_norm = np.max(np.abs(snapshot_data[:, 1]))
-        snapshot_data[:, 0] /= disp_norm
-        snapshot_data[:, 1] /= vel_norm
+        if normalize == True:
+            snapshot_data[:, 0] /= disp_norm
+            snapshot_data[:, 1] /= vel_norm
 
-    if ft_norm is not None:
+    if ft_norm is not None and normalize == True:
         for col in range(forcing.shape[-1]):
-            forcing[:, col] = (forcing[:, col] - ft_norm[col, 1])/(ft_norm[col, 0] - ft_norm[col, 1])
+            forcing[:, :, col] = (forcing[:, :, col] - ft_norm[col, 1])/(ft_norm[col, 0] - ft_norm[col, 1])
     else:
         ft_norm = np.zeros([forcing.shape[-1], 2])
         for col in range(forcing.shape[-1]):
-            ft_norm[col, 0] = np.max(forcing[:, col])
-            ft_norm[col, 1] = np.min(forcing[:, col])
-            forcing[:, col] = (forcing[:, col] - ft_norm[col, 1])/(ft_norm[col, 0] - ft_norm[col, 1])
+            ft_norm[col, 0] = np.max(forcing[:, :, col])
+            ft_norm[col, 1] = np.min(forcing[:, :, col])
+            if normalize == True:
+                forcing[:, :, col] = (forcing[:, :, col] - ft_norm[col, 1])/(ft_norm[col, 0] - ft_norm[col, 1])
         
     return snapshot_data, parameters, forcing, disp_norm, vel_norm, ft_norm
 
-def save_dataset(path, data, params, forcing, cluster=None):
+def save_dataset(path, data, params, forcing, cluster = None, disp_norm = None, vel_norm = None, ft_norm = None):
+    if disp_norm is not None:
+        data[:, 0] *= disp_norm
+        data[:, 1] *= vel_norm
+        for col in range(forcing.shape[-1]):
+            forcing[:, col] *= (ft_norm[col, 0] - ft_norm[col, 1])
+            forcing[:, col] += ft_norm[col, 1]
+
     if cluster is not None:
         if not os.path.exists(os.path.join(path, f"{cluster}")):
             os.makedirs(os.path.join(path, f"{cluster}"))         
@@ -40,15 +49,15 @@ def save_dataset(path, data, params, forcing, cluster=None):
         np.save(os.path.join(path, f"params.npy"), params)
         np.save(os.path.join(path, f"forcing.npy"), forcing)
 
-def load_cluster(path, cluster, disp_norm = None, vel_norm = None, ft_norm = None):
+def load_cluster(path, cluster, normalize = False, disp_norm = None, vel_norm = None, ft_norm = None):
     path = os.path.join(path, str(cluster))
-    snapshot_data, parameters, forcing, disp_norm, vel_norm, ft_norm = load_dataset(path, disp_norm, vel_norm, ft_norm)
+    snapshot_data, parameters, forcing, disp_norm, vel_norm, ft_norm = load_dataset(path, normalize, disp_norm, vel_norm, ft_norm)
     return snapshot_data, parameters, forcing, disp_norm, vel_norm, ft_norm
 
-def save_cluster(path, cluster, data, params, forcing):
+def save_cluster(path, cluster, data, params, forcing, disp_norm = None, vel_norm = None, ft_norm = None):
     if not os.path.exists(os.path.join(path, str(cluster))):
         os.makedirs(os.path.join(path, str(cluster)))
-    save_dataset(path, data, params, forcing, cluster)
+    save_dataset(path, data, params, forcing, cluster, disp_norm, vel_norm, ft_norm)
 
 def parameter_plot(param_train, param_val, param_test):
     plt.figure(figsize=(6, 4))

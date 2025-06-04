@@ -1,6 +1,5 @@
 data:
-  cluster_bounds: null
-  n_clusters: null
+  n_clusters: 1
   nt: 200
   nx: 101
   param_bounds:
@@ -29,21 +28,19 @@ sensors:
   n_sensors: 18
   num_sensors: 18
 training:
+  Qs:
+    AE: 100
+    AENODE: 120
+    LASTSTEP: 40
+    LS: 100
+    ONESTEP: 40
+    SPATIALDIFF: 120
+    TEMPORALDIFF: 80
+  lMB: 4
+  lr: 0.01
+  lr_patience: 100
+  nBPP: 400
+  nMB: 2000
   n_epoch: 4000
   patience: 200
   warmup: 200
-  lr_patience: 100
-  lr: 0.01
-  Qs:
-    AENODE: 120
-    AE: 100
-    ONESTEP: 40
-    LASTSTEP: 40
-    LS: 100
-    TEMPORALDIFF: 80
-    SPATIALDIFF: 120
-  lMB: 4
-  nMB: 2000
-  nBPP: 400
-
-
