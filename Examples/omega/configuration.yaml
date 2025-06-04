@@ -1,0 +1,41 @@
+data:
+  n_clusters:
+  nt: 500
+  nx: 101
+  param_bounds:
+    w:
+model:
+  D_hsizes:
+  - 120
+  - 120
+  E_hsizes:
+  - 120
+  - 120
+  lat_space: 8
+  n_control: 2
+  n_layers: 2
+  n_units: 300
+  noise: 0.0075
+seed: 9
+sensors:
+  n_A_basis: 13
+  n_SVD_basis: 15
+  n_sensors: 18
+  num_sensors: 18
+training:
+  Qs:
+    AE: 100
+    AENODE: 120
+    LASTSTEP: 40
+    LS: 100
+    ONESTEP: 40
+    SPATIALDIFF: 120
+    TEMPORALDIFF: 80
+  lMB: 5
+  lr: 0.01
+  lr_patience: 100
+  nBPP: 400
+  nMB: 2000
+  n_epoch: 4000
+  patience: 200
+  warmup: 200
