@@ -1,9 +1,11 @@
 data:
-  n_clusters:
-  nt: 500
+  n_clusters: null
+  nt: 400
   nx: 101
   param_bounds:
     w:
+    - 9.869604401089358
+    - 157.91367041742973
 model:
   D_hsizes:
   - 120

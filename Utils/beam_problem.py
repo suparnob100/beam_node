@@ -3,7 +3,7 @@ import numpy as np
 from upsampler import fourier_upsample_add
 
 class beam_problem:
-    def __init__(self, nx = 101, nt = 200, c_v = 1.0, c_m = 0.001, ep = 0.02, i_range = range(1, 250), k_range = range(0, 90), upsample = None, max_dt = None, vars = ["tau", "s"]):
+    def __init__(self, nx = 101, nt = 200, c_v = 1.0, c_m = 0.001, ep = 0.02, i_range = range(1, 250), k_range = range(0, 90), upsample = None, t = None, max_dt = None, vars = ["tau", "s"]):
         self.nx = nx
         self.nt = nt
         self.c_v = c_v
@@ -12,6 +12,7 @@ class beam_problem:
         self.i_range = i_range
         self.k_range = k_range
         self.upsample = upsample
+        self.t = t
         self.max_dt = max_dt
 
         self.vars = vars
@@ -62,15 +63,26 @@ class beam_problem:
         sum_term_d = 0
         sum_term_v = 0
 
-        for k in self.k_range:
-            
-            Ci_k, Di_k = CDi_k(dk[k], alphak[k], fi, omega, ci, k)
+        if self.vars == ["omega"]:
+            for k in self.k_range:
+                
+                Ci_k, Di_k = CDi_k(dk[k-1], alphak[k-1], fi, omega, ci, k)
 
-            sum_term_d += Ci_k * np.cos((k+1) * omega * t)     +     Di_k * np.sin((k+1) * omega * t)
+                sum_term_d += Ci_k * np.cos((k) * omega * t)     +     Di_k * np.sin((k) * omega * t)
 
-            sum_term_v += (-(k+1) * omega) * Ci_k * np.sin((k+1) * omega * t)    +   ((k+1) * omega) * Di_k * np.cos((k+1) * omega * t)
+                sum_term_v += (-(k) * omega) * Ci_k * np.sin((k) * omega * t)    +   ((k) * omega) * Di_k * np.cos((k) * omega * t)
 
-        return (fi / (omega_i**2 * T)) + sum_term_d, sum_term_v
+            return (fi / (omega_i**2 * T))*0 + sum_term_d, sum_term_v
+        else:
+            for k in self.k_range:
+                
+                Ci_k, Di_k = CDi_k(dk[k], alphak[k], fi, omega, ci, k)
+
+                sum_term_d += Ci_k * np.cos((k+1) * omega * t)     +     Di_k * np.sin((k+1) * omega * t)
+
+                sum_term_v += (-(k+1) * omega) * Ci_k * np.sin((k+1) * omega * t)    +   ((k+1) * omega) * Di_k * np.cos((k+1) * omega * t)
+
+            return (fi / (omega_i**2 * T)) + sum_term_d, sum_term_v
     
     def forcing_fn(self, tau, s, omega, t):
         def forcing_fn_t(t, tau, T, K=90):
@@ -97,7 +109,10 @@ class beam_problem:
 
     def solve(self, tau, s, omega, cycles = 1):
         T = 2*np.pi/omega
-        t = np.linspace(0, T*cycles, self.nt*cycles+1) # Time
+        if self.t is not None:
+            t = self.t
+        else:
+            t = np.linspace(0, T*cycles, self.nt*cycles+1) # Time
         x = np.linspace(0, 1, self.nx) # Space
         
         W = 0
@@ -115,12 +130,12 @@ class beam_problem:
         if self.upsample != None:
             W = W[:, :int(T/self.max_dt)]
             W_dot = W_dot[:, :int(T/self.max_dt)]
-            W_ret = np.zeros([self.nx, t.shape[0]+1])
-            W_dot_ret = np.zeros([self.nx, t.shape[0]+1])
+            W_ret = np.zeros([self.nx, t.shape[0]])
+            W_dot_ret = np.zeros([self.nx, t.shape[0]])
 
             for i in range(self.nx):
-                W_ret[i] = fourier_upsample_add(W[i], t.shape[0]+1 - W.shape[1])
-                W_dot_ret[i] = fourier_upsample_add(W_dot[i], t.shape[0]+1 - W.shape[1])
+                W_ret[i] = fourier_upsample_add(W[i], t.shape[0] - W.shape[1])
+                W_dot_ret[i] = fourier_upsample_add(W_dot[i], t.shape[0] - W.shape[1])
             
             return W_ret[:, :-1].T, W_dot_ret[:, :-1].T, ft
     
