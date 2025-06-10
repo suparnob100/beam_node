@@ -1,5 +1,5 @@
 data:
-  n_clusters: null
+  n_clusters: 5
   nt: 400
   nx: 101
   param_bounds:
