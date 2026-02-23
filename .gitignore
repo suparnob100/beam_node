@@ -1,0 +1,16 @@
+
+**/Examples/omega/Outputs/datasets/Init/**
+**/Examples/omega/Outputs/datasets/Train/**
+**/Examples/omega/Outputs/datasets/Test/**
+**/Examples/omega/Outputs/datasets/Val/**
+
+**/Examples/tau_and_s/Outputs/datasets/Init/**
+**/Examples/tau_and_s/Outputs/datasets/Train/**
+**/Examples/tau_and_s/Outputs/datasets/Test/**
+**/Examples/tau_and_s/Outputs/datasets/Val/**
+
+**/Examples/omega/Outputs/clustering/**
+**/Examples/tau_and_s/Outputs/clustering/**
+
+**/Examples/omega/Outputs/model_checkpoint/**
+**/Examples/tau_and_s/Outputs/model_checkpoint/**
