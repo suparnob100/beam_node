@@ -9,6 +9,8 @@ from neuromancer.problem import Problem
 from neuromancer.callbacks import Callback
 from neuromancer.dataset import DictDataset
 
+
+
 def move_batch_to_device(batch, device="cpu"):
     return {k: v.to(device) if isinstance(v, torch.Tensor) else v for k, v in batch.items()}
 
@@ -102,8 +104,7 @@ class Trainer:
                 output[f'mean_{self.train_metric}'] = torch.mean(torch.stack(losses))
                 self.callback.begin_epoch(self, output)
 
-                if self.lr_scheduler is not None:
-                    self.lr_scheduler.step(output[f'mean_{self.train_metric}'])
+                
 
                 with torch.set_grad_enabled(self.model.grad_inference):
                     self.model.eval()
@@ -144,6 +145,9 @@ class Trainer:
                         print('Early stopping!!!')
                         break
                     self.current_epoch = i + 1
+                
+                if self.lr_scheduler is not None:
+                    self.lr_scheduler.step(output[self.eval_metric])
 
         except KeyboardInterrupt:
             print("Interrupted training loop.")

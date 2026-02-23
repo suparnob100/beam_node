@@ -35,8 +35,8 @@ def save_dataset(path, data, params, forcing, cluster = None, disp_norm = None, 
         data[:, 0] *= disp_norm
         data[:, 1] *= vel_norm
         for col in range(forcing.shape[-1]):
-            forcing[:, col] *= (ft_norm[col, 0] - ft_norm[col, 1])
-            forcing[:, col] += ft_norm[col, 1]
+            forcing[:, :, col] *= (ft_norm[col, 0] - ft_norm[col, 1])
+            forcing[:, :, col] += ft_norm[col, 1]
 
     if cluster is not None:
         if not os.path.exists(os.path.join(path, f"{cluster}")):

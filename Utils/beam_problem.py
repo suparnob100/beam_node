@@ -102,7 +102,10 @@ class beam_problem:
         var_dict = {"tau": tau, "s": s, "omega": omega}
         n_dim = len(self.vars)
         ft = np.zeros([self.nt, n_dim+1])
-        ft[:, 0] = forcing_fn_t(t, tau, 2*np.pi/omega)[:,].reshape(self.nt, )
+        if 'omega' in self.vars:
+            ft[:, 0] = forcing_fn_t(np.linspace(0, 2*np.pi/omega, t.shape[0]), tau, 2*np.pi/omega)[:,].reshape(self.nt, )
+        else:
+            ft[:, 0] = forcing_fn_t(t, tau, 2*np.pi/omega)[:,].reshape(self.nt, )
         for i, var in enumerate(self.vars):
             ft[:, i+1] = var_dict[var]
         return ft       

@@ -4,7 +4,7 @@ import scipy.signal as signal
 #%% Low Pass Filter
 def LPF(time, data):
     # Filter specifications
-    order = 2000  # Filter order
+    order = 200  # Filter order
     Fpass = 60  # Cutoff frequency (Hz) for the low-pass filter
     Fs = 1/(time[1] - time[0])  # Sampling frequency (Hz)
      
@@ -27,10 +27,10 @@ class noise_reducer:
     # something
 
     def apply_LPF(self, signal, nt, t, desired_cycles):
-        for i in range(signal.shape[0]):
-            data = np.tile(signal, desired_cycles, 1)
+        for i in range(signal.shape[1]):
+            data = np.tile(signal[:, i:i+1], [desired_cycles, 1])
             data = LPF(t, data)
-            signal[i] = data[:nt, :]
+            signal[:, i] = data[:nt, :]
         return signal
 
 

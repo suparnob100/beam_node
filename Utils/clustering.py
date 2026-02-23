@@ -7,6 +7,19 @@ from scipy.spatial import cKDTree
 import matplotlib.pyplot as plt
 import numpy as np
 
+def _to_2d(arr):
+    arr = np.asarray(arr)
+    if arr.ndim == 1:
+        arr = arr.reshape(-1, 1)
+    return arr
+
+def _scale_to_unit(x, bounds):
+    """Scale each dimension to [0,1] given bounds for distance checks."""
+    x = np.asarray(x, dtype=float)
+    lo = np.array([b[0] for b in bounds], dtype=float)
+    hi = np.array([b[1] for b in bounds], dtype=float)
+    denom = np.maximum(hi - lo, 1e-12)
+    return (x - lo) / denom
 
 class Cluster:
     def __init__(self, params, features, bounds=None, seed=42, normalize=True):
@@ -93,57 +106,176 @@ class Cluster:
 
         return grouped_data, grouped_params, grouped_idx
 
-    def generate_points_in_cluster(self, cluster_idx, existing_points, n_samples=10, min_dist=1e-3, oversample_factor=5):
+
+
+    def generate_points_in_cluster(
+        self,
+        cluster_idx,
+        existing_points,
+        n_samples=10,
+        min_dist=1e-3,
+        oversample_factor=5,
+        max_attempts=1000,
+        use_scaled_metric=True,
+    ):
+        """
+        Improved sampler that enforces `min_dist` from BOTH the existing cluster points
+        AND among newly accepted samples. Optionally performs distance checks in
+        unit-scaled space (recommended).
+        """
+        # --- setup ---
         param_dim = self.params.shape[1]
         bounds = self.bounds if self.bounds is not None else [
-            (self.params[:, i].min(), self.params[:, i].max()) for i in range(param_dim)]
+            (self.params[:, i].min(), self.params[:, i].max()) for i in range(param_dim)
+        ]
 
-        tree = cKDTree(existing_points)
+        existing_points = _to_2d(existing_points) if existing_points is not None else None
         accepted = []
-        max_attempts = 1000
-        attempts = 0
 
+        # Pre-scale existing points if using scaled metric
+        if use_scaled_metric:
+            existing_scaled = _scale_to_unit(existing_points, bounds) if existing_points is not None and len(existing_points) > 0 else None
+            min_dist_eff = float(min_dist) / np.sqrt(param_dim)  # optional: make min_dist roughly per-dim
+        else:
+            existing_scaled = existing_points
+            min_dist_eff = float(min_dist)
+
+        attempts = 0
         while len(accepted) < n_samples and attempts < max_attempts:
-            n_try = oversample_factor * (n_samples - len(accepted))
+            # Draw candidates uniformly over the bounds
+            n_try = max(1, oversample_factor * (n_samples - len(accepted)))
             candidates = np.random.uniform(
                 low=[b[0] for b in bounds],
                 high=[b[1] for b in bounds],
-                size=(n_try, param_dim)
+                size=(n_try, param_dim),
             )
-            predicted = self.classifier.predict(candidates)
-            in_region = predicted == cluster_idx
-            dists, _ = tree.query(candidates, k=1)
-            far_enough = dists >= min_dist
-            mask = in_region & far_enough
-            accepted.extend(candidates[mask])
+
+            # Keep only those classified as the desired cluster
+            pred = self.classifier.predict(candidates)
+            candidates = candidates[pred == cluster_idx]
+            if candidates.size == 0:
+                attempts += 1
+                continue
+
+            # Distance checks (scaled or raw)
+            cand_scaled = _scale_to_unit(candidates, bounds) if use_scaled_metric else candidates
+
+            # Build KDTree against (existing + accepted_so_far)
+            if accepted:
+                acc_arr = np.vstack(accepted)
+                acc_scaled = _scale_to_unit(acc_arr, bounds) if use_scaled_metric else acc_arr
+            else:
+                acc_scaled = None
+
+            # Merge existing + accepted for a single tree
+            ref = None
+            if existing_scaled is not None and len(existing_scaled) > 0:
+                ref = existing_scaled
+            if acc_scaled is not None and len(acc_scaled) > 0:
+                ref = acc_scaled if ref is None else np.vstack([ref, acc_scaled])
+
+            if ref is None:
+                # No reference points yet, accept greedily while enforcing mutual spacing
+                # by growing a temporary tree with each newly accepted point.
+                tmp = []
+                tmp_scaled = []
+                for c, cs in zip(candidates, cand_scaled):
+                    if not tmp_scaled:
+                        tmp.append(c)
+                        tmp_scaled.append(cs)
+                    else:
+                        tree = cKDTree(np.vstack(tmp_scaled))
+                        d, _ = tree.query(cs, k=1)
+                        if d >= min_dist_eff:
+                            tmp.append(c)
+                            tmp_scaled.append(cs)
+                    if len(accepted) + len(tmp) >= n_samples:
+                        break
+                accepted.extend(tmp)
+            else:
+                # First check against reference
+                tree = cKDTree(ref)
+                d, _ = tree.query(cand_scaled, k=1)
+                mask = d >= min_dist_eff
+                filtered = candidates[mask]
+                filtered_scaled = cand_scaled[mask]
+
+                # Now enforce mutual spacing among the filtered ones themselves + accepted
+                tmp = []
+                tmp_scaled = []
+                # Start a working tree with ref; we will incrementally add accepted points
+                working = ref.copy()
+                working_tree = cKDTree(working) if len(working) > 0 else None
+
+                for c, cs in zip(filtered, filtered_scaled):
+                    # Check distance to working set
+                    ok = True
+                    if working_tree is not None:
+                        dist, _ = working_tree.query(cs, k=1)
+                        ok = dist >= min_dist_eff
+                    if ok:
+                        tmp.append(c)
+                        tmp_scaled.append(cs)
+                        # update working set & tree
+                        working = np.vstack([working, cs]) if working.size else cs[None, :]
+                        working_tree = cKDTree(working)
+                    if len(accepted) + len(tmp) >= n_samples:
+                        break
+                accepted.extend(tmp)
+
             attempts += 1
+
+        if len(accepted) < n_samples:
+            # Fallback: return whatever we have (or empty) rather than blocking
+            pass
 
         return np.array(accepted[:n_samples])
 
-    def balance_cluster_points(self, external_params, min_points=16, min_dist=1e-3, oversample_factor=5):
-        external_params = np.array(external_params)
-        if external_params.ndim == 1:
-            external_params = external_params.reshape(-1, 1)
 
+    def balance_cluster_points(
+        self,
+        external_params,
+        min_points,
+        min_dist=1e-3,
+        oversample_factor=5,
+        use_scaled_metric=True,
+        max_attempts=1000,
+    ):
+        """
+        Ensure each cluster has at least `min_points` by sampling new points that:
+        - are predicted to belong to the cluster, and
+        - are at least `min_dist` away from existing points in that cluster AND from each other.
+
+        Returns:
+        dict: cluster_idx -> (new_points ndarray of shape [n_new, D])
+        """
+        external_params = _to_2d(external_params)
         cluster_map = self.classifier.predict(external_params)
-        n_clusters = int(np.max(self.cluster_labels)) + 1
+
+        # Infer number of clusters either from fitted labels or predictions
+        if hasattr(self, "cluster_labels") and self.cluster_labels is not None:
+            n_clusters = int(np.max(self.cluster_labels)) + 1
+        else:
+            n_clusters = int(np.max(cluster_map)) + 1
 
         grouped = [[] for _ in range(n_clusters)]
         for i, label in enumerate(cluster_map):
-            grouped[label].append(external_params[i])
+            grouped[int(label)].append(external_params[i])
 
         new_param_dict = {}
         for cluster_idx, points in enumerate(grouped):
-            points = np.array(points)
-            if len(points) >= min_points:
+            points = np.vstack(points) if len(points) > 0 else np.empty((0, external_params.shape[1]))
+            if len(points) >= min_points[cluster_idx]:
                 continue
-            n_needed = min_points - len(points)
+            n_needed = min_points[cluster_idx] - len(points)
             new_points = self.generate_points_in_cluster(
                 cluster_idx=cluster_idx,
                 existing_points=points,
                 n_samples=n_needed,
                 min_dist=min_dist,
-                oversample_factor=oversample_factor
+                oversample_factor=oversample_factor,
+                max_attempts=max_attempts,
+                use_scaled_metric=use_scaled_metric,
             )
             new_param_dict[cluster_idx] = new_points
 
@@ -207,3 +339,156 @@ class Cluster:
 
         else:
             print("[plot_decision_regions] Unsupported parameter dimension.")
+
+    def _infer_bounds_and_volume(self):
+        """Return bounds array [(lo,hi),...], and total hypervolume."""
+        if self.bounds is not None:
+            bounds = list(self.bounds)
+        else:
+            bounds = [(self.params[:, i].min(), self.params[:, i].max())
+                    for i in range(self.params.shape[1])]
+        lo = np.array([b[0] for b in bounds], dtype=float)
+        hi = np.array([b[1] for b in bounds], dtype=float)
+        vol = float(np.prod(np.maximum(hi - lo, 1e-12)))
+        return bounds, vol
+
+    def estimate_points_per_cluster_by_density(
+        self,
+        density: float | None = None,
+        total_points: int | None = None,
+        n_mc: int = 50000,
+        use_scaled_space: bool = True,
+        min_per_cluster: int = 0,
+        max_per_cluster: int | None = None,
+        rng: np.random.Generator | None = None,
+    ):
+        """
+        Monte-Carlo estimate of how many samples ("variables") to place in each cluster
+        for a desired density or total number of samples.
+
+        Args:
+            density: points per unit hypervolume. If None, it will be inferred from `total_points`.
+                    If `use_scaled_space=True`, density is w.r.t. the unit hypercube [0,1]^D.
+            total_points: optional total number of points to allocate across clusters.
+            n_mc: number of Monte-Carlo samples to estimate cluster hypervolumes.
+            use_scaled_space: if True, estimate volumes in the unit cube (more stable),
+                            else in raw parameter bounds.
+            min_per_cluster: lower bound per cluster.
+            max_per_cluster: optional upper bound per cluster.
+            rng: optional NumPy Generator.
+
+        Returns:
+            counts: dict {cluster_idx: int}
+            info:   dict with fractions, volumes, and raw float targets per cluster.
+        """
+        assert self.classifier is not None, "Call find_clusters() first to fit the classifier."
+
+        rng = rng or np.random.default_rng(self.seed)
+        D = self.params.shape[1]
+
+        # Bounds and total volume
+        bounds, vol_total = self._infer_bounds_and_volume()
+        lo = np.array([b[0] for b in bounds], dtype=float)
+        hi = np.array([b[1] for b in bounds], dtype=float)
+
+        # Sample uniformly in either raw space or unit cube
+        if use_scaled_space:
+            U = rng.random((n_mc, D))
+            X = lo + U * (hi - lo)           # map to raw for prediction
+            vol_for_density = 1.0            # unit cube volume
+        else:
+            X = rng.uniform(lo, hi, size=(n_mc, D))
+            vol_for_density = vol_total
+
+        # Predict cluster for each MC sample
+        labels = self.classifier.predict(X)
+        K = int(np.max(labels)) + 1
+        counts_mc = np.bincount(labels, minlength=K)
+        frac = counts_mc / float(n_mc)
+
+        # Cluster hypervolumes (in the space we picked for density)
+        vols = frac * (1.0 if use_scaled_space else vol_total)
+
+        # Decide density
+        if density is None:
+            if total_points is None:
+                raise ValueError("Provide either `density` or `total_points`.")
+            density = float(total_points) / vol_for_density
+
+        # Real-valued targets, then integerize with Largest Remainder while satisfying bounds
+        targets = density * vols  # float target per cluster (may not sum to total_points if density given)
+        floors = np.floor(targets).astype(int)
+        rema = targets - floors
+
+        # If total_points given, adjust to hit it exactly
+        if total_points is not None:
+            deficit = int(total_points) - int(floors.sum())
+            if deficit > 0:
+                # give extra ones to largest remainders
+                order = np.argsort(-rema)
+                for i in order[:deficit]:
+                    floors[i] += 1
+            elif deficit < 0:
+                # remove from smallest remainders (or where floors>0)
+                order = np.argsort(rema)
+                take = -deficit
+                for i in order:
+                    if take == 0:
+                        break
+                    if floors[i] > 0:
+                        floors[i] -= 1
+                        take -= 1
+
+        # Enforce min/max with redistribution
+        alloc = floors.copy()
+
+        # First lift to minimums
+        need = 0
+        for k in range(K):
+            if alloc[k] < min_per_cluster:
+                need += (min_per_cluster - alloc[k])
+                alloc[k] = min_per_cluster
+
+        if max_per_cluster is not None:
+            for k in range(K):
+                if alloc[k] > max_per_cluster:
+                    drop = alloc[k] - max_per_cluster
+                    alloc[k] = max_per_cluster
+                    need -= drop  # freeing capacity
+
+        # Redistribute remaining need/capacity to respect totals if total_points specified
+        if total_points is not None:
+            diff = int(alloc.sum()) - int(total_points)
+            if diff != 0:
+                if diff > 0:
+                    # too many → remove from clusters with smallest remainder first but above min
+                    order = np.argsort(rema)
+                    for i in order:
+                        if diff == 0:
+                            break
+                        lim = min_per_cluster
+                        while alloc[i] > lim and diff > 0:
+                            alloc[i] -= 1
+                            diff -= 1
+                else:
+                    # too few → add to clusters with largest remainder first but under max (if any)
+                    order = np.argsort(-rema)
+                    for i in order:
+                        if diff == 0:
+                            break
+                        lim = max_per_cluster if max_per_cluster is not None else np.inf
+                        while alloc[i] < lim and diff < 0:
+                            alloc[i] += 1
+                            diff += 1
+
+        # Pack results
+        out_counts = {k: int(alloc[k]) for k in range(K)}
+        info = {
+            "fraction": {k: float(frac[k]) for k in range(K)},
+            "volume": {k: float(vols[k]) for k in range(K)},
+            "targets_float": {k: float(targets[k]) for k in range(K)},
+            "density_used": float(density),
+            "use_scaled_space": bool(use_scaled_space),
+            "estimated_total_volume": float(vol_for_density),
+        }
+        return out_counts, info
