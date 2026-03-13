@@ -21,6 +21,34 @@ def _scale_to_unit(x, bounds):
     denom = np.maximum(hi - lo, 1e-12)
     return (x - lo) / denom
 
+def _normalize_cluster_targets(min_points, n_clusters):
+    """Normalize scalar/list/dict cluster targets into a dense int array."""
+    if np.isscalar(min_points):
+        return np.full(n_clusters, int(min_points), dtype=int)
+
+    if isinstance(min_points, dict):
+        values = min_points
+        while values and all(isinstance(v, dict) for v in values.values()):
+            values = next(iter(values.values()))
+
+        targets = np.zeros(n_clusters, dtype=int)
+        for cluster_idx in range(n_clusters):
+            if cluster_idx not in values:
+                raise KeyError(f"Missing min_points entry for cluster {cluster_idx}.")
+            value = values[cluster_idx]
+            if not np.isscalar(value):
+                raise TypeError(
+                    "Each min_points entry must be a scalar. "
+                    "If you built the dict in a notebook, rerunning a cell may have nested it."
+                )
+            targets[cluster_idx] = int(value)
+        return targets
+
+    targets = np.asarray(min_points)
+    if targets.ndim != 1 or len(targets) != n_clusters:
+        raise ValueError(f"Expected {n_clusters} min_points values, received shape {targets.shape}.")
+    return targets.astype(int)
+
 class Cluster:
     def __init__(self, params, features, bounds=None, seed=42, normalize=True):
         self.params = np.array(params)
@@ -257,12 +285,16 @@ class Cluster:
             n_clusters = int(np.max(self.cluster_labels)) + 1
         else:
             n_clusters = int(np.max(cluster_map)) + 1
+        min_points = _normalize_cluster_targets(min_points, n_clusters)
 
         grouped = [[] for _ in range(n_clusters)]
         for i, label in enumerate(cluster_map):
             grouped[int(label)].append(external_params[i])
 
-        new_param_dict = {}
+        new_param_dict = {
+            cluster_idx: np.empty((0, external_params.shape[1]))
+            for cluster_idx in range(n_clusters)
+        }
         for cluster_idx, points in enumerate(grouped):
             points = np.vstack(points) if len(points) > 0 else np.empty((0, external_params.shape[1]))
             if len(points) >= min_points[cluster_idx]:
