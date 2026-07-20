@@ -1,31 +1,31 @@
 data:
-  n_clusters: 7
-  nt: 400
+  n_clusters: 2
+  nt: 100
   nx: 101
   param_bounds:
     w:
-    - 9.869604401089358
-    - 157.91367041742973
+    - 376.99111843077515
+    - 628.3185307179587
 model:
   D_hsizes:
-  - 150
-  - 150
+  - 80
+  - 80
   E_hsizes:
-  - 150
-  - 150
-  lat_space: 8
+  - 80
+  - 80
+  lat_space: 16
   n_control: 2
-  n_layers: 3
-  n_units: 300
+  n_layers: 4
+  n_units: 100
   noise: 0.0075
   n_experts: 3
   n_hist: 8
   lora_rank: 8
   gate_temperature: 2.0
-  gate_t_min: 0.25
+  gate_t_min: 0.5
   gate_anneal_gamma: 0.999
   gate_sigma_min: 0.01
-  gate_sigma_scale: 0.5
+  gate_sigma_scale: 0.8
   gate_lr_mult: 0.01
   gate_control_indices:
   - 0
@@ -37,30 +37,32 @@ model:
   expert_max_cosine_similarity: 0.95
 seed: 9
 sensors:
+  dof_layout: interleaved
   n_A_basis: 13
   n_SVD_basis: 15
-  n_sensors: 18
-  num_sensors: 18
-  sensor_mode: scalar
+  n_sensors: 16
+  num_sensors: 50
+  sensor_mode: vector_nodes
 training:
   Qs:
-    AE: 180
-    AENODE: 140
-    LASTSTEP: 40
+    AE: 200
+    AENODE: 200
+    KINEMATIC: 60
+    LASTSTEP: 80
     LS: 120
-    ONESTEP: 40
-    SPATIALDIFF: 80
-    TEMPORALDIFF: 60
+    ONESTEP: 60
+    SPATIALDIFF: 120
+    TEMPORALDIFF: 80
     GATEBALANCE: 0.10
     GATEANCHOR: 10.0
     GATEOVERLAP: 0.50
     EXPERTDIVERSITY: 0.005
-  lMB: 32
-  lr: 0.001
-  lr_patience: 200
-  nBPP: 4
-  nMB: 2048
+  lMB: 10
+  lr: 0.01
+  lr_patience: 100
+  nBPP: 6
+  nMB: 512
   n_epoch: 10000
-  patience: 1000
-  resample_every_epochs: 20
+  patience: 500
+  resample_every_epochs: 100
   warmup: 1000

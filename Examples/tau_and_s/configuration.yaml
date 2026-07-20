@@ -11,22 +11,40 @@ data:
     - 0.15915494309189535
 model:
   D_hsizes:
-  - 120
-  - 120
+  - 128
+  - 128
   E_hsizes:
-  - 120
-  - 120
+  - 128
+  - 128
   lat_space: 8
   n_control: 3
   n_layers: 3
   n_units: 300
   noise: 0.0075
+  n_experts: 3
+  n_hist: 8
+  lora_rank: 8
+  gate_temperature: 2.0
+  gate_t_min: 0.5
+  gate_anneal_gamma: 0.999
+  gate_sigma_min: 0.02
+  gate_sigma_scale: 0.8
+  gate_lr_mult: 0.1
+  gate_control_indices:
+  - 0
+  use_phase_in_gate: true
+  gate_phase_harmonics: 1
+  gate_regime_boundaries:
+  - 0.47
+  - 0.53
+  expert_max_cosine_similarity: 0.95
 seed: 9
 sensors:
   n_A_basis: 13
   n_SVD_basis: 15
   n_sensors: 18
   num_sensors: 18
+  sensor_mode: scalar
 training:
   Qs:
     AE: 100
@@ -36,11 +54,16 @@ training:
     ONESTEP: 40
     SPATIALDIFF: 80
     TEMPORALDIFF: 60
+    GATEBALANCE: 0.10
+    GATEANCHOR: 10.0
+    GATEOVERLAP: 0.50
+    EXPERTDIVERSITY: 0.005
   lMB: 5
   lr: 0.01
-  lr_patience: 300
-  nBPP: 200
-  nMB: 1000
+  lr_patience: 200
+  nBPP: 256
+  nMB: 1024
   n_epoch: 10000
-  patience: 2000
+  patience: 1000
+  resample_every_epochs: 1000
   warmup: 200

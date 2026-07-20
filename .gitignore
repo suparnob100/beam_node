@@ -14,3 +14,13 @@
 
 **/Examples/omega/Outputs/model_checkpoint/**
 **/Examples/tau_and_s/Outputs/model_checkpoint/**
+
+*.pkl
+*.npy
+*.pth
+*.vtk
+*.png
+*.jpg
+
+__pycache__/
+*.pyc
